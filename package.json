@@ -1,0 +1,24 @@
+{
+  "name": "knee_preop_planning",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "http-server ./src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arpitpatel1771/knee_preop_planning.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Arpitpatel1771/knee_preop_planning/issues"
+  },
+  "homepage": "https://github.com/Arpitpatel1771/knee_preop_planning#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

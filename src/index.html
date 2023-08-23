@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Knee Preoperation Planning</title>
+        <link rel="stylesheet" href="./index.css" />
+    </head>
+    <body>
+        <canvas id="canvas"></canvas>
+        <div class="overlay sidebar-left">
+            <div class="controlPoints" id="controlPoints"></div>
+            <div class="update-btn">
+                <button class="btn update" id="update">Update</button>
+            </div>
+        </div>
+        <div class="overlay sidebar-right" id="sidebar-right"></div>
+    </body>
+</html>
+<script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.143.0/build/three.module.js",
+            "three/addons": "https://unpkg.com/three@0.143.0/examples/jsm"
+        }
+    }
+</script>
+
+<script type="module">
+    // import * as THREE from "https://unpkg.com/three@<version>/build/three.module.js";
+    import * as THREE from "three";
+    import { OrbitControls } from "https://unpkg.com/three@0.143.0/examples/jsm/controls/OrbitControls.js";
+    import { STLLoader } from "https://unpkg.com/three@0.143.0/examples/jsm/loaders/STLLoader.js";
+    import { TransformControls } from "https://unpkg.com/three@0.143.0/examples/jsm/controls/TransformControls.js";
+    import { BasicShadowMap, DoubleSide } from "three";
+    import { degToRad } from "https://unpkg.com/three@0.143.0/src/math/MathUtils.js";
+    import {
+        lg,
+        initializeDebugCamera,
+        getIntersections,
+        getCanvasRelativePosition,
+        getPickPosition,
+        populateControlPointsToDom,
+        get3DControlPoint,
+        getRandomLine,
+    } from "./functions.js";
+    import { state } from "./classes.js";
+
+    const parser = new DOMParser();
+    const scene = new THREE.Scene();
+    const canvas = document.querySelector("#canvas");
+    const renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        logarithmicDepthBuffer: true,
+        outputEncoding: THREE.sRGBEncoding,
+        gammaFactor: 2.2,
+        preserveDrawingBuffer: true,
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    const debugCamera = new THREE.PerspectiveCamera();
+    initializeDebugCamera(debugCamera, renderer);
+    let activeCamera = debugCamera;
+
+    // controls
+    const orbitControls = new OrbitControls(activeCamera, canvas);
+    const transformControls = new TransformControls(activeCamera, canvas);
+    transformControls.mode = "translate";
+    scene.add(transformControls);
+
+    let meshesToIntersect = [];
+
+    // asset urls
+    const url1 = "./assets/Right_Femur.stl";
+    const url2 = "./assets/Right_Tibia.stl";
+
+    // scene settings
+    scene.background = new THREE.Color("#000");
+
+    // renderer settings
+    renderer.localClippingEnabled = true;
+
+    // lights
+    const light = new THREE.AmbientLight("#fff", 0.3);
+    const hemlight = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(20, 20, 20);
+    scene.add(light);
+    scene.add(hemlight);
+    scene.add(directionalLight);
+
+    // const axesHelper = new THREE.AxesHelper(100);
+    // scene.add(axesHelper);
+
+    const group = new THREE.Object3D();
+    group.rotateX(degToRad(-90));
+
+    scene.add(group);
+
+    // functions
+    function retargetControls() {
+        // Sets the OrbitControls to target the centre of the structure
+        const bbox = new THREE.Box3().setFromObject(group);
+        orbitControls.target = new THREE.Vector3().addVectors(bbox.min, bbox.max).multiplyScalar(0.5);
+    }
+
+    function loadAsset(url, loader, color, group, meshesToIntersect) {
+        loader.load(
+            url,
+            function (geometry) {
+                const mesh = new THREE.Mesh(
+                    geometry,
+                    new THREE.MeshPhongMaterial({
+                        color: color,
+                        wireframe: true,
+                    })
+                );
+
+                mesh.scale.set(0.01, 0.01, 0.01);
+                group.add(mesh);
+                meshesToIntersect.push(mesh);
+                retargetControls();
+            },
+            (xhr) => {},
+            (error) => {
+                console.log(error);
+                throw error;
+            }
+        );
+    }
+
+    const loader = new STLLoader();
+
+    loadAsset(url1, loader, "#d1c8b0", group, meshesToIntersect);
+    loadAsset(url2, loader, "#d1c8b0", group, meshesToIntersect);
+
+    populateControlPointsToDom(document.getElementById("controlPoints"));
+
+    // Dummy data if you want to play around with planes and lines
+
+    // state.setControlPoint("fc", get3DControlPoint([-0.622, 7.21, 0.95]));
+    // state.setControlPoint("hc", get3DControlPoint([-0.883, 11.533, 1.13]));
+    // state.setControlPoint("le", get3DControlPoint([-0.975, 7.35, 0.944]));
+    // state.setControlPoint("me", get3DControlPoint([-0.195, 7.35, 0.915]));
+    // state.setControlPoint("dmp", get3DControlPoint([-0.344, 7.14, 0.728]));
+    // state.setControlPoint("dlp", get3DControlPoint([-0.838, 7.143, 0.798]));
+    // state.setControlPoint("plp", get3DControlPoint([-0.816, 7.443, 0.658]));
+    // state.setControlPoint("pmp", get3DControlPoint([-0.362, 7.422, 0.589]));
+    // state.setControlPoint("fdc", get3DControlPoint([-0.5998, 7.21, 0.918]));
+    // state.setControlPoint("fpc", get3DControlPoint([-1.098, 11.276, 0.991]));
+
+    // scene.add(state.controlPoints.fc);
+    // scene.add(state.controlPoints.hc);
+    // scene.add(state.controlPoints.le);
+    // scene.add(state.controlPoints.me);
+    // scene.add(state.controlPoints.dmp);
+    // scene.add(state.controlPoints.dlp);
+    // scene.add(state.controlPoints.plp);
+    // scene.add(state.controlPoints.pmp);
+    // scene.add(state.controlPoints.fdc);
+    // scene.add(state.controlPoints.fpc);
+
+    function update() {
+        let sidebar = document.getElementById("sidebar-right");
+        sidebar.innerHTML = "";
+
+        if (state.controlPoints.fc && state.controlPoints.hc) {
+            let line = getRandomLine(state.controlPoints.fc.position, state.controlPoints.hc.position);
+            let name = "mech";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.mech = line;
+        }
+
+        if (state.controlPoints.fdc && state.controlPoints.fpc) {
+            let line = getRandomLine(state.controlPoints.fdc.position, state.controlPoints.fpc.position);
+            let name = "anat";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.anat = line;
+        }
+
+        if (state.controlPoints.me && state.controlPoints.le) {
+            let line = getRandomLine(state.controlPoints.me.position, state.controlPoints.le.position);
+            let name = "tea";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.tea = line;
+        }
+
+        if (state.controlPoints.pmp && state.controlPoints.plp) {
+            let line = getRandomLine(state.controlPoints.pmp.position, state.controlPoints.plp.position);
+            let name = "pca";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.pca = line;
+        }
+
+        if (state.lines.mech) {
+            let planeNormal = state.controlPoints.fc.position
+                .clone()
+                .add(state.controlPoints.hc.position.clone().multiplyScalar(-1))
+                .normalize();
+            const plane = new THREE.Plane(planeNormal, -state.controlPoints.fc.position.clone().dot(planeNormal));
+            const helper = new THREE.PlaneHelper(plane, 5, "#00ff00");
+            let name = "mechPlane";
+            helper.name = name;
+            state.planes.mech = plane;
+            state.planes.mechHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+        }
+
+        if (state.lines.tea && state.planes.mech) {
+            let point1 = new THREE.Vector3(0, 0, 0);
+            let point2 = new THREE.Vector3(0, 0, 0);
+
+            state.planes.mech.projectPoint(state.controlPoints.me.position, point1);
+            state.planes.mech.projectPoint(state.controlPoints.le.position, point2);
+
+            let line = getRandomLine(point1, point2);
+            let name = "projectedTea";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.projTea = line;
+
+            let p1 = get3DControlPoint(point1, "#fff", 0.02);
+            p1.name = "projectedTeaP1";
+            state.points.projectedTeaP1 = p1;
+            scene.remove(scene.getObjectByName(p1.name));
+            scene.add(p1);
+
+            let p2 = get3DControlPoint(point2, "#fff", 0.02);
+            p2.name = "projectedTeaP2";
+            state.points.projectedTeaP2 = p2;
+            scene.remove(scene.getObjectByName(p2.name));
+            scene.add(p2);
+        }
+
+        if (state.lines.projTea && state.planes.mech) {
+            let planeNormal = state.points.projectedTeaP2.position
+                .clone()
+                .add(state.points.projectedTeaP1.position.clone().multiplyScalar(-1))
+                .normalize();
+            const plane = new THREE.Plane(planeNormal, -state.controlPoints.fc.position.clone().dot(planeNormal));
+            const helper = new THREE.PlaneHelper(plane, 5, 0xffff00);
+            let name = "projectedTeaPlane";
+            helper.name = name;
+            state.planes.projectedTea = plane;
+            state.planes.projectedTeaHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+
+            let baseVector = state.controlPoints.fc.position.clone();
+            let intersectionVector = planeNormal.clone().cross(state.planes.mech.normal.clone());
+
+            // Using mean data for femur and tibia length,
+            // from the following research paper https://www.mdpi.com/2673-4036/1/2/9
+            // total length = 89cm
+            // total height of stl models after scaling down = 29.0934936523m
+            // length = 10mm
+            // k (length taking in consideration the model's dimensions) = 0.327m
+            let k = 0.327;
+            let p1 = baseVector.clone().add(intersectionVector.clone().multiplyScalar(k));
+            let p2 = baseVector.clone().add(intersectionVector.clone().multiplyScalar(-k));
+
+            let finalPoint = p1.z > p2.z ? p1 : p2;
+
+            finalPoint = get3DControlPoint(finalPoint, "#fff", 0.02);
+            finalPoint.name = "anteriorLineP2";
+            state.points.anteriorLineP2 = finalPoint;
+            scene.remove(scene.getObjectByName(finalPoint.name));
+            scene.add(finalPoint);
+
+            let line = getRandomLine(state.controlPoints.fc.position, finalPoint.position);
+            name = "anteriorLine";
+            line.name = name;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(line);
+            state.lines.anteriorLine = line;
+        }
+
+        if (state.lines.anteriorLine && state.planes.mech) {
+            let planeNormal = state.controlPoints.fc.position
+                .clone()
+                .add(state.controlPoints.hc.position.clone().multiplyScalar(-1))
+                .normalize();
+            planeNormal.applyAxisAngle(
+                state.points.anteriorLineP2.position.clone().sub(state.controlPoints.fc.position).normalize(),
+                degToRad(state.varusRotation)
+            );
+            const plane = new THREE.Plane(planeNormal, -state.controlPoints.fc.position.clone().dot(planeNormal));
+            const helper = new THREE.PlaneHelper(plane, 5, 0xffff00);
+            let name = "varusPlane";
+            helper.name = name;
+            state.planes.varusPlane = plane;
+            state.planes.varusHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(helper);
+
+            let sidebar = document.getElementById("sidebar-right");
+            let incremental = parser
+                .parseFromString(
+                    `
+                    <div class="incrementals" id="varusRotation">
+                        <div class="title">Varus/Valgus Rotation</div>
+                        <div class="inputWrapper">
+                            <button class="btn decrement">-</button>
+                                <span class="stateDisplay">${state.varusRotation}</span>
+                            <button class="btn increment">+</button>
+                        </div>
+                    </div>
+                    `,
+                    "text/html"
+                )
+                .getRootNode().body.firstChild;
+
+            sidebar.appendChild(incremental);
+
+            let buttonCollection = sidebar.querySelectorAll("button");
+            for (let button of buttonCollection) {
+                if (button.classList.contains("increment")) {
+                    button.onclick = () => {
+                        state.changeVarusRotation("+");
+                    };
+                } else {
+                    button.onclick = () => {
+                        state.changeVarusRotation("-");
+                    };
+                }
+            }
+        }
+
+        if (state.planes.varusPlane) {
+            let normal = state.planes.varusPlane.normal.clone().multiplyScalar(-1);
+            let v1 = state.points.anteriorLineP2.position.clone().sub(state.controlPoints.fc.position);
+            v1.cross(normal);
+
+            // Using mean data for femur and tibia length,
+            // from the following research paper https://www.mdpi.com/2673-4036/1/2/9
+            // total length = 89cm
+            // total height of stl models after scaling down = 29.0934936523m
+            // length = 10mm
+            // k (length taking in consideration the model's dimensions) = 0.327m
+            let k = 0.327;
+            let p1 = state.controlPoints.fc.position.clone().add(v1.normalize().clone().multiplyScalar(k));
+            let p2 = state.controlPoints.fc.position.clone().sub(v1.normalize().clone().multiplyScalar(k));
+
+            let finalPoint = p1.x < p2.x ? p1 : p2;
+
+            normal = normal
+                .clone()
+                .applyAxisAngle(
+                    finalPoint.clone().sub(state.controlPoints.fc.position).normalize(),
+                    degToRad(state.flexionRotation)
+                ).normalize();
+                
+
+            const plane = new THREE.Plane(normal, -state.controlPoints.fc.position.clone().dot(normal));
+            const helper = new THREE.PlaneHelper(plane, 5, "#ff0000");
+            let name = "flexionPlane";
+            helper.name = name;
+            state.planes.flexionPlane = plane;
+            state.planes.flexionHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(helper);
+
+            let sidebar = document.getElementById("sidebar-right");
+            let incremental = parser
+                .parseFromString(
+                    `
+                    <div class="incrementals" id="flexionRotation">
+                        <div class="title">Flexion/Extension Rotation</div>
+                        <div class="inputWrapper">
+                            <button class="btn decrement">-</button>
+                                <span class="stateDisplay">${state.flexionRotation}</span>
+                            <button class="btn increment">+</button>
+                        </div>
+                    </div>
+                    `,
+                    "text/html"
+                )
+                .getRootNode().body.firstChild;
+
+            sidebar.appendChild(incremental);
+
+            let buttonCollection = incremental.querySelectorAll("button");
+            for (let button of buttonCollection) {
+                if (button.classList.contains("increment")) {
+                    button.onclick = () => {
+                        state.changeFlexionRotation("+");
+                    };
+                } else {
+                    button.onclick = () => {
+                        state.changeFlexionRotation("-");
+                    };
+                }
+            }
+        }
+
+        if (state.planes.flexionPlane) {
+            let normal = state.planes.flexionPlane.normal.clone();
+            const plane = new THREE.Plane(normal, -state.controlPoints.dmp.position.clone().dot(normal));
+            const helper = new THREE.PlaneHelper(plane, 5, "blue");
+            let name = "distalMedialPlane";
+            helper.name = name;
+            state.planes.distalMedialPlane = plane;
+            state.planes.distalMedialHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(helper);
+        }
+
+        if (state.planes.distalMedialPlane) {
+            const plane = state.planes.distalMedialPlane.clone()
+
+            // Using mean data for femur and tibia length,
+            // from the following research paper https://www.mdpi.com/2673-4036/1/2/9
+            // total length = 89cm
+            // total height of stl models after scaling down = 29.0934936523m
+            // length = 10mm
+            // k (length taking in consideration the model's dimensions) = 0.327m
+            let k = 0.0327 * state.distalResection
+            const kVector = new THREE.Vector3(0, 1, 0).multiplyScalar(k)
+            let offset = kVector.dot(plane.normal)
+
+            plane.translate(plane.normal.clone().multiplyScalar(offset))
+            const helper = new THREE.PlaneHelper(plane, 5, "white");
+            let name = "distalResectionPlane";
+            helper.name = name;
+            state.planes.distalResectionPlane = plane;
+            state.planes.distalResectionHelper = helper;
+            scene.remove(scene.getObjectByName(name));
+            scene.add(helper);           
+            
+            let sidebar = document.getElementById("sidebar-right");
+            let incremental = parser
+                .parseFromString(
+                    `
+                    <div class="incrementals" id="distalResection">
+                        <div class="title">Distal Resection</div>
+                        <div class="inputWrapper">
+                            <button class="btn decrement">-</button>
+                                <span class="stateDisplay">${state.distalResection} mm</span>
+                            <button class="btn increment">+</button>
+                        </div>
+                    </div>
+                    `,
+                    "text/html"
+                )
+                .getRootNode().body.firstChild;
+
+            sidebar.appendChild(incremental);
+
+            let buttonCollection = incremental.querySelectorAll("button");
+            for (let button of buttonCollection) {
+                if (button.classList.contains("increment")) {
+                    button.onclick = () => {
+                        state.changeDistalResection("+");
+                    };
+                } else {
+                    button.onclick = () => {
+                        state.changeDistalResection("-");
+                    };
+                }
+            }
+
+            let clippingToggle = parser.parseFromString(
+                `
+                <div class="incrementals" id="toggleClipping">
+                    <div class="title">Toggle Clipping</div>
+                    <div class="container">
+                        <label class="switch">
+                            <input type="checkbox" ${state.enableClipping ? "checked":""} id="toggler"/>
+                            <div></div>
+                        </label>
+                    </div>
+                </div>
+                `,
+                "text/html"
+            ).getRootNode().body.firstChild
+            
+            let checkboxes = clippingToggle.querySelectorAll('#toggler')
+            for (let checkbox of checkboxes) {
+                checkbox.onclick = function() {
+                    state.toggleClipping()
+                }
+            }
+            sidebar.appendChild(clippingToggle)
+
+        }
+
+        if (sidebar.innerHTML === "") {
+            sidebar.innerHTML = `Please Select Landmark Points <br/> to display Plane controls`
+        }
+    }
+
+    document.getElementById("update").onclick = update;
+
+    renderer.domElement.onclick = function (event) {
+        const intersections = getIntersections(event, canvas, activeCamera, raycaster, meshesToIntersect);
+
+        if (intersections.length < 1) {
+            return;
+        }
+
+        let clickedobj = intersections[0].object;
+        let clickedpoint = intersections[0].point;
+
+        // Calibrate the data of active control point with clicked point
+        if (state.activeControlPoint) {
+            let controlPoint3DObject = state.controlPoints[state.activeControlPoint];
+            if (controlPoint3DObject) {
+                // controlPoint3DObject.position.set(...clickedpoint);
+            } else {
+                state.setControlPoint(state.activeControlPoint, get3DControlPoint(clickedpoint));
+                scene.add(state.controlPoints[state.activeControlPoint]);
+            }
+        }
+    };
+
+    // responsiveness
+    function resizeRendererToDisplaySize(renderer) {
+        const canvas = renderer.domElement;
+        const pixelRatio = window.devicePixelRatio;
+        const width = (canvas.clientWidth * pixelRatio) | 0;
+        const height = (canvas.clientHeight * pixelRatio) | 0;
+        const needResize = canvas.width !== width || canvas.height !== height;
+        if (needResize) {
+            renderer.setSize(width, height, false);
+        }
+        return needResize;
+    }
+    function render(time) {
+        if (resizeRendererToDisplaySize(renderer)) {
+            const canvas = renderer.domElement;
+            activeCamera.aspect = canvas.clientWidth / canvas.clientHeight;
+            activeCamera.updateProjectionMatrix();
+        }
+        orbitControls.update();
+        if (state.reRenderDOMControlPoints) {
+            state.reRenderDOMControlPoints = false;
+            populateControlPointsToDom(document.getElementById("controlPoints"));
+        }
+
+        if (state.worldNeedsUpdate) {
+            state.worldNeedsUpdate = false;
+            try{
+
+            update();
+            }catch(e){
+                console.error(e)
+            }
+        }
+
+        let controlPoint3DObject = state.controlPoints[state.activeControlPoint];
+        // Set Active Control between Orbit and TransformControls
+        if (state.activeControlPoint) {
+            orbitControls.enabled = false;
+            if (controlPoint3DObject && transformControls.object !== controlPoint3DObject) {
+                // if selected point has a 3d point
+                transformControls.attach(controlPoint3DObject);
+            } else if (controlPoint3DObject) {
+                transformControls.enabled = true;
+                scene.add(transformControls);
+            } else if (!controlPoint3DObject) {
+                // if the selected point does not have a 3d point
+                transformControls.enabled = false;
+                scene.remove(transformControls);
+            }
+        } else {
+            orbitControls.enabled = true;
+            transformControls.enabled = false;
+            scene.remove(transformControls);
+        }
+
+        if (state.enableClipping && state.planes.distalResectionPlane) {
+            renderer.clippingPlanes = [state.planes.distalResectionPlane];
+        } else {
+            renderer.clippingPlanes = [];
+        }
+
+        renderer.render(scene, activeCamera);
+
+        requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+</script>
